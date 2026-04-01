@@ -16,9 +16,7 @@ async function checkMcpStatus() {
     if (response.ok) {
       statusDiv.className = 'status running';
       statusDiv.innerHTML = '<span class="dot green"></span><span>MCP Server: Running</span>';
-    } else {
-      throw new Error('not ok');
-    }
+    } else throw new Error('not ok');
   } catch {
     statusDiv.className = 'status stopped';
     statusDiv.innerHTML = '<span class="dot red"></span><span>MCP Server: Stopped</span>';
@@ -27,16 +25,18 @@ async function checkMcpStatus() {
 
 function setAutoBadge(enabled) {
   const badge = document.getElementById('autoBadge');
-  if (enabled) {
-    badge.textContent = 'ON';
-    badge.className = 'auto-badge on';
-  } else {
-    badge.textContent = 'OFF';
-    badge.className = 'auto-badge off';
-  }
+  badge.textContent = enabled ? 'ON' : 'OFF';
+  badge.className = `auto-badge ${enabled ? 'on' : 'off'}`;
 }
 
-/** Shared scrape logic — returns scraped items array or null if no schema */
+function setCommandBadge(hasSaved) {
+  const badge = document.getElementById('commandStatus');
+  badge.textContent = hasSaved ? 'saved ✓' : 'not set';
+  badge.className = `cmd-badge ${hasSaved ? 'saved' : ''}`;
+}
+
+// ─── Scrape / Send helpers (shared by manual buttons & auto mode) ────────────
+
 async function scrapeCurrentPage() {
   const stored = await chrome.storage.local.get('scrapingSchema');
   if (!stored.scrapingSchema) return null;
@@ -58,40 +58,27 @@ async function scrapeCurrentPage() {
       document.querySelectorAll(baseSelector).forEach(el => {
         if (!schema.fields || Object.keys(schema.fields).length === 0) {
           let val = null;
-          if (baseAttr === 'text' || !baseAttr) {
-            val = el.textContent ? el.textContent.trim() : null;
-          } else if (baseAttr === 'html') {
-            val = el.innerHTML;
-          } else {
-            val = el.getAttribute(baseAttr);
-          }
+          if (baseAttr === 'text' || !baseAttr) val = el.textContent?.trim() ?? null;
+          else if (baseAttr === 'html') val = el.innerHTML;
+          else val = el.getAttribute(baseAttr);
           items.push({ extractedValue: val });
           return;
         }
-
         const item = {};
         for (const [key, rawSelector] of Object.entries(schema.fields)) {
           let cssSelector = rawSelector;
           let attr = 'text';
-
           const atIndex = rawSelector.lastIndexOf('@');
           if (atIndex !== -1) {
             cssSelector = rawSelector.substring(0, atIndex);
             attr = rawSelector.substring(atIndex + 1);
           }
-
           const field = cssSelector ? el.querySelector(cssSelector) : el;
           if (field) {
-            if (attr === 'text') {
-              item[key] = field.textContent ? field.textContent.trim() : null;
-            } else if (attr === 'html') {
-              item[key] = field.innerHTML;
-            } else {
-              item[key] = field.getAttribute(attr);
-            }
-          } else {
-            item[key] = null;
-          }
+            if (attr === 'text') item[key] = field.textContent?.trim() ?? null;
+            else if (attr === 'html') item[key] = field.innerHTML;
+            else item[key] = field.getAttribute(attr);
+          } else item[key] = null;
         }
         items.push(item);
       });
@@ -104,7 +91,6 @@ async function scrapeCurrentPage() {
   return results[0].result;
 }
 
-/** Shared send-to-MCP logic — returns true on success */
 async function sendToMcp(data) {
   const response = await fetch('http://localhost:3000/store-data', {
     method: 'POST',
@@ -114,15 +100,20 @@ async function sendToMcp(data) {
   return response.ok;
 }
 
-/** Scrape + send in one shot (used by auto mode) */
+async function sendCommandToMcp(command) {
+  await fetch('http://localhost:3000/set-command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command })
+  });
+}
+
 async function autoScrapeAndSend() {
   showResult('⚡ Auto scraping...', 'success');
   try {
     const data = await scrapeCurrentPage();
-    if (!data) {
-      showResult('Auto scrape: no schema saved', 'error');
-      return;
-    }
+    if (!data) { showResult('Auto scrape: no schema saved', 'error'); return; }
+
     scrapedData = data;
     chrome.storage.local.set({ latestScrapedData: data });
 
@@ -149,15 +140,20 @@ chrome.storage.local.get(['scrapingSchema'], (result) => {
   }
 });
 
+// Load saved command template
+chrome.storage.local.get(['copilotCommand'], (result) => {
+  if (result.copilotCommand) {
+    document.getElementById('commandInput').value = result.copilotCommand;
+    setCommandBadge(true);
+  }
+});
+
 // Load auto-scrape toggle state & run immediately if enabled
 chrome.storage.local.get(['autoScrapeEnabled'], async (result) => {
   const enabled = !!result.autoScrapeEnabled;
   document.getElementById('autoScrapeToggle').checked = enabled;
   setAutoBadge(enabled);
-
-  if (enabled) {
-    await autoScrapeAndSend();
-  }
+  if (enabled) await autoScrapeAndSend();
 });
 
 // ─── Toggle ──────────────────────────────────────────────────────────────────
@@ -166,11 +162,29 @@ document.getElementById('autoScrapeToggle').addEventListener('change', (e) => {
   const enabled = e.target.checked;
   chrome.storage.local.set({ autoScrapeEnabled: enabled });
   setAutoBadge(enabled);
+  showResult(
+    enabled ? '⚡ Auto scrape enabled — triggers on every page change' : 'Auto scrape disabled',
+    enabled ? 'success' : 'error'
+  );
+});
 
-  if (enabled) {
-    showResult('⚡ Auto scrape enabled — triggers on every page change', 'success');
-  } else {
-    showResult('Auto scrape disabled', 'error');
+// ─── Save Command Template ────────────────────────────────────────────────────
+
+document.getElementById('saveCommand').addEventListener('click', async () => {
+  const command = document.getElementById('commandInput').value.trim();
+  if (!command) {
+    showResult('Please enter a Copilot command first', 'error');
+    return;
+  }
+
+  chrome.storage.local.set({ copilotCommand: command });
+  setCommandBadge(true);
+
+  try {
+    await sendCommandToMcp(command);
+    showResult('🤖 Command saved & sent to MCP server', 'success');
+  } catch {
+    showResult('🤖 Command saved locally (MCP not reachable)', 'error');
   }
 });
 
@@ -178,15 +192,10 @@ document.getElementById('autoScrapeToggle').addEventListener('change', (e) => {
 
 document.getElementById('saveSchema').addEventListener('click', () => {
   const schemaText = document.getElementById('schemaInput').value.trim();
-  if (!schemaText) {
-    showResult('Please provide a JSON schema object', 'error');
-    return;
-  }
+  if (!schemaText) { showResult('Please provide a JSON schema object', 'error'); return; }
   try {
     const schema = JSON.parse(schemaText);
-    if (!schema.selector) {
-      throw new Error('Schema must contain at least a "selector" property.');
-    }
+    if (!schema.selector) throw new Error('Schema must contain at least a "selector" property.');
     chrome.storage.local.set({ scrapingSchema: schema });
     chrome.storage.local.remove(['apiKey', 'htmlPrompt']);
     showResult('Schema saved successfully!', 'success');
@@ -201,10 +210,7 @@ document.getElementById('scrapeData').addEventListener('click', async () => {
   showResult('Scraping page...', 'success');
   try {
     const data = await scrapeCurrentPage();
-    if (!data) {
-      showResult('Generate schema first', 'error');
-      return;
-    }
+    if (!data) { showResult('Generate schema first', 'error'); return; }
     scrapedData = data;
     chrome.storage.local.set({ latestScrapedData: data });
     showResult(`Scraped ${data.length} items`, 'success');
@@ -224,12 +230,8 @@ document.getElementById('sendToMcp').addEventListener('click', async () => {
   showResult('Sending to MCP server...', 'success');
   try {
     const ok = await sendToMcp(stored.latestScrapedData);
-    if (ok) {
-      showResult('Data sent to MCP successfully!', 'success');
-      checkMcpStatus();
-    } else {
-      showResult('MCP server not responding', 'error');
-    }
+    if (ok) { showResult('Data sent to MCP successfully!', 'success'); checkMcpStatus(); }
+    else showResult('MCP server not responding', 'error');
   } catch {
     showResult('MCP server not running', 'error');
   }

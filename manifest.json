@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "DOM Scraper MCP",
-  "version": "1.0.0",
-  "description": "Scrape DOM data and feed to VS Code Copilot via MCP",
+  "version": "1.1.0",
+  "description": "Scrape DOM data, feed to VS Code Copilot via MCP, and auto-execute tasks",
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"

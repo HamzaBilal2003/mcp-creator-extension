@@ -1,0 +1,51 @@
+{
+  "name": "dom-scraper-mcp-runner",
+  "displayName": "DOM Scraper MCP Runner",
+  "description": "Listens to MCP server events and auto-runs Copilot tasks when new scraped data arrives",
+  "version": "1.0.0",
+  "publisher": "toolsverse",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "domScraperMcp.start",
+        "title": "MCP Runner: Start Listening"
+      },
+      {
+        "command": "domScraperMcp.stop",
+        "title": "MCP Runner: Stop Listening"
+      },
+      {
+        "command": "domScraperMcp.showLastTask",
+        "title": "MCP Runner: Show Last Task File"
+      }
+    ],
+    "configuration": {
+      "title": "DOM Scraper MCP Runner",
+      "properties": {
+        "domScraperMcp.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL of the MCP HTTP server"
+        },
+        "domScraperMcp.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start listening when VS Code opens"
+        },
+        "domScraperMcp.openCopilotChat": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open Copilot Chat with the command when data arrives"
+        }
+      }
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}

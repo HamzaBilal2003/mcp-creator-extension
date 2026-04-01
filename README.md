@@ -1,186 +1,87 @@
-# DOM Scraper MCP Extension
+# DOM Scraper MCP - Complete Automation Pipeline
 
-Chrome extension that scrapes DOM data using Gemini AI and provides it to VS Code Copilot via MCP server.
+This project contains three parts that work together to completely automate web scraping and code generation:
+1. **Chrome Extension**: Scrapes data from web pages.
+2. **MCP Server**: Acts as the central hub to receive data and broadcast tasks.
+3. **VS Code Extension**: Listens for tasks from the server and auto-runs GitHub Copilot with your instructions.
 
-## Architecture
+---
 
-```
-Chrome Extension → Gemini API (generate schema) → Scrape Page → MCP Server → VS Code Copilot
-```
+## 🚀 Setup Guide (For a New Device)
 
-## Quick Start
+Follow these steps exactly to set up the entire pipeline on a new machine.
 
-### 1. Install Chrome Extension
+### Part 1: Start the MCP Server
+This server handles communication between your browser and VS Code.
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable "Developer mode" (top right)
-3. Click "Load unpacked"
-4. Select the root folder (containing `manifest.json`)
-5. Extension icon appears in toolbar
+1. Open a terminal and navigate to the `mcp-server` folder.
+2. Install dependencies (only needed once):
+   ```bash
+   npm install
+   ```
+3. Start the server:
+   ```bash
+   node server.js
+   ```
+*(Leave this terminal window open in the background!)*
 
-### 2. Setup MCP Server
+### Part 2: Install the VS Code Extension
+We have already packaged the extension into a `.vsix` file, meaning you **do not** need to build or compile anything on the new device!
 
-```bash
-cd mcp-server
-npm install
-node server.js
-```
+1. Open a new terminal and navigate to the `vscode-extension` folder.
+2. Run this exact command to install the extension into VS Code:
+   ```bash
+   code --install-extension dom-scraper-mcp-runner-1.0.0.vsix
+   ```
+3. **CRITICAL:** Fully close all VS Code windows and reopen VS Code to apply the installation.
+4. Once VS Code restarts, look at the bottom right status bar. You should see `$(sync~spin) MCP: Listening`. This means VS Code is connected to your MCP server!
 
-Server runs on:
-- **MCP**: stdio (for VS Code)
-- **HTTP**: http://localhost:3000 (for extension)
+### Part 3: Install the Chrome Extension
+1. Open Google Chrome.
+2. Type `chrome://extensions/` into the URL bar.
+3. Turn on **Developer mode** (toggle in the top right corner).
+4. Click **Load unpacked** in the top left.
+5. Select the main project folder (`mcp-creator-extension`).
 
-### 3. Configure VS Code Copilot
+---
 
-#### For GitHub Copilot Chat:
+## 🛠️ How to Use the Automation
 
-Edit VS Code settings.json (`Cmd/Ctrl + Shift + P` → "Preferences: Open User Settings (JSON)"):
+Once everything is installed and your MCP server is running (`node server.js`), follow these steps:
 
-```json
-{
-  "github.copilot.chat.mcp.servers": {
-    "dom-scraper": {
-      "command": "node",
-      "args": ["/FULL/PATH/TO/mcp-server/server.js"]
-    }
-  }
-}
-```
+1. **Pin the extension** in Chrome and click the puzzle icon to open the popup.
+2. **Set your Schema**: Enter the JSON selector for the data you want to scrape and click **Save Schema**.
+3. **Set your Copilot Command**: In the `🤖 Copilot Command Template` box, tell Copilot exactly what to do with the data. 
+   - *Example:* `"Using the scraped data, please generate a React UI component and save it to the workspace."*
+   - Click **Save & Send Command to MCP**.
+4. **Turn on Automation**: Toggle the `⚡ Auto Scrape & Send` switch to **ON**.
+5. **Browse!** Navigate to any page matching your schema. 
+   - The Chrome extension will automatically scrape the data.
+   - It sends the data to the MCP server.
+   - VS Code will instantly pop open the GitHub Copilot Chat window with your data and command pre-filled!
+6. **Press Enter** in Copilot Chat to execute the task.
+7. Once Copilot finishes, you will receive a Desktop Notification letting you know to check the results.
 
-**Replace `/FULL/PATH/TO/` with actual absolute path**
+---
 
-Example:
-- Windows: `"C:\\Users\\YourName\\dom-scraper-mcp\\mcp-server\\server.js"`
-- Mac/Linux: `"/Users/yourname/dom-scraper-mcp/mcp-server/server.js"`
+## ⚙️ VS Code Commands & Settings
 
-#### Verify Connection:
+You can always control the VS Code extension manually. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) and type `MCP Runner`:
 
-1. Open VS Code Copilot Chat
-2. Type: `@workspace what MCP tools are available?`
-3. Should see: `get_scraped_data`, `query_scraped_data`, `get_data_stats`
+| Command | Description |
+|---|---|
+| `MCP Runner: Start Listening` | Connect to the MCP server manually |
+| `MCP Runner: Stop Listening` | Disconnect from the MCP server |
+| `MCP Runner: Show Last Task File` | Open the `.copilot-task.md` file from your last scrape |
 
-### 4. Usage Workflow
+### Status Bar Indicators (Bottom Right)
+| Icon | Meaning |
+|---|---|
+| `$(radio-tower) MCP: Idle` | Not connected |
+| `$(sync~spin) MCP: Listening` | Connected, waiting for data |
+| `$(loading~spin) MCP: Running…` | Copilot task in progress |
+| `$(check) MCP: Done ✓` | Last task completed |
+| `$(error) MCP: Error` | Connection error (auto-retries in 5s, check if the server is running!) |
 
-#### Step 1: Get Gemini API Key
-1. Go to https://aistudio.google.com/app/apikey
-2. Create free API key
-3. Copy it
-
-#### Step 2: Generate Schema
-1. Navigate to target website
-2. Click extension icon
-3. Paste Gemini API key
-4. Enter prompt: `"Extract all product cards with title, price, and image URL"`
-5. Click "Generate Schema"
-
-#### Step 3: Scrape Data
-1. Click "Scrape Current Page"
-2. Extension extracts data using generated schema
-3. Click "Send to MCP Server"
-
-#### Step 4: Use in Copilot
-Open VS Code Copilot Chat and ask:
-
-```
-Get the scraped data and analyze it
-```
-
-```
-What products have price over $50?
-```
-
-```
-Create a summary table of all scraped items
-```
-
-## MCP Tools
-
-### `get_scraped_data`
-Returns all scraped data with metadata
-
-### `query_scraped_data`
-Filter data by field and value
-```
-{
-  "field": "price",
-  "value": "99"
-}
-```
-
-### `get_data_stats`
-Get statistics (count, fields, last update)
-
-## Extension Features
-
-- **Schema Generation**: AI-powered schema creation using Gemini
-- **DOM Scraping**: Intelligent data extraction
-- **Status Monitor**: Real-time MCP server status
-- **LocalStorage**: Saves API key and schemas
-
-## Troubleshooting
-
-### Extension can't connect to MCP server
-- Ensure server is running: `node mcp-server/server.js`
-- Check http://localhost:3000/health in browser
-
-### Copilot doesn't see MCP tools
-- Verify absolute path in settings.json
-- Restart VS Code
-- Check Copilot Chat output for MCP connection errors
-
-### Schema generation fails
-- Verify Gemini API key is valid
-- Check browser console for errors
-- Ensure page HTML is accessible
-
-### No data scraped
-- Verify schema selectors match page structure
-- Check browser console
-- Try regenerating schema with better prompt
-
-## Example Prompts for Schema Generation
-
-```
-Extract all article titles, dates, and author names
-```
-
-```
-Find product cards with name, price, rating, and availability
-```
-
-```
-Get all table rows with company name, stock price, and change
-```
-
-```
-Scrape job listings with title, company, location, and salary
-```
-
-## Files Structure
-
-```
-dom-scraper-mcp/
-├── manifest.json          # Extension config
-├── popup.html            # Extension UI
-├── popup.js              # Extension logic
-├── background.js         # Service worker
-├── content.js            # DOM access
-├── icon.png              # Extension icon
-└── mcp-server/
-    ├── package.json      # Node dependencies
-    └── server.js         # MCP + HTTP server
-```
-
-## Development
-
-### Add Custom Tools
-
-Edit `mcp-server/server.js`, add to `ListToolsRequestSchema` and `CallToolRequestSchema` handlers.
-
-### Modify UI
-
-Edit `popup.html` and `popup.js` for extension interface changes.
-
-## License
-
-MIT
+### Failsafe Task File
+Every time new data arrives, the extension automatically writes a `.copilot-task.md` file to the root directory of your workspace. If Copilot Chat ever fails to open automatically, you can open this file and just copy-paste the pre-formatted request into your chat!
